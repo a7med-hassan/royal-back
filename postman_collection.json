@@ -1,0 +1,181 @@
+{
+  "info": {
+    "name": "Royal Shield Backend APIs",
+    "description": "Complete API collection for Royal Shield Backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://royal-back-2jf7.vercel.app",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🚀 APIs عامة (لا تحتاج token)",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "الترحيب",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            }
+          }
+        },
+        {
+          "name": "نموذج حجز (BookForm)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"أحمد محمد\",\n  \"phoneNumber\": \"0123456789\",\n  \"carType\": \"سيارة سيدان\",\n  \"carModel\": \"2024\",\n  \"service\": \"تغيير زيت\",\n  \"branch\": \"فرع المعادي\",\n  \"notes\": \"أريد موعد صباحاً\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/bookForm",
+              "host": ["{{base_url}}"],
+              "path": ["bookForm"]
+            }
+          }
+        },
+        {
+          "name": "إرسال عرض",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"أحمد محمد\",\n  \"email\": \"ahmed@example.com\",\n  \"phone\": \"0123456789\",\n  \"msg\": \"أريد عرض سعر لسيارتي\",\n  \"company\": \"شركة أحمد\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sendOffer",
+              "host": ["{{base_url}}"],
+              "path": ["sendOffer"]
+            }
+          }
+        },
+        {
+          "name": "عرض المدونات",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/blog",
+              "host": ["{{base_url}}"],
+              "path": ["blog"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔒 APIs محمية (تحتاج admin token)",
+      "item": [
+        {
+          "name": "تسجيل دخول مدير",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/login",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "login"]
+            }
+          }
+        },
+        {
+          "name": "عرض الأرقام التسلسلية",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/viewSerials",
+              "host": ["{{base_url}}"],
+              "path": ["viewSerials"]
+            }
+          }
+        },
+        {
+          "name": "عرض الحجوزات",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/bookForms",
+              "host": ["{{base_url}}"],
+              "path": ["bookForms"]
+            }
+          }
+        },
+        {
+          "name": "عرض العروض",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/getOffers",
+              "host": ["{{base_url}}"],
+              "path": ["getOffers"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

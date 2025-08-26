@@ -23,6 +23,15 @@ app.use(
       "http://localhost:4201",
       "http://localhost:4202",
       "http://localhost:5173",
+      "http://localhost:63406",
+      "http://localhost:8080",
+      "http://localhost:5000",
+      "http://localhost:4000",
+      "http://localhost:3002",
+      "http://localhost:3003",
+      "http://localhost:3004",
+      "http://localhost:3005",
+      "http://localhost:*", // Allow any localhost port
 
       // Royal Nano Ceramic - Main domain
       "https://www.royalnanoceramic.com",
@@ -58,6 +67,9 @@ app.use(
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// Additional CORS handling for preflight requests
+app.options("*", cors());
 
 // Note: Static files middleware removed for Vercel compatibility
 // Files are now stored in memory/database instead of disk
@@ -165,6 +177,7 @@ app.post("/updateBranch", async (req, res) => {
       .send({ msg: "Error updating branch", error: error.message });
   }
 });
+
 // Protected Admin Route
 app.get("/viewSerials", async (req, res) => {
   const authHeader = req.headers["authorization"];
@@ -193,6 +206,7 @@ app.get("/viewSerials", async (req, res) => {
     return res.status(403).send(`Invalid token: ${err.message}`);
   }
 });
+
 /* user check serials */
 app.post("/checkSerial", async (req, res) => {
   try {
@@ -343,6 +357,7 @@ app.get("/activatedWarrantys", async (req, res) => {
     return res.status(403).send(`Invalid token: ${err.message}`);
   }
 });
+
 // Delete activation by serial number and send all remaining activations
 app.delete("/activation/:serialNumber", async (req, res) => {
   const { serialNumber } = req.params;
@@ -368,6 +383,7 @@ app.delete("/activation/:serialNumber", async (req, res) => {
     res.status(500).send(`Error: ${err.message}`);
   }
 });
+
 // Delete all activations
 app.delete("/activations", async (req, res) => {
   try {
@@ -417,6 +433,7 @@ app.post("/sendOffer", async (req, res) => {
     res.status(500).send({ message: "An error occurred", error });
   }
 });
+
 app.post("/offerCheck", async (req, res) => {
   const { Id } = req.body;
   try {
@@ -435,6 +452,7 @@ app.post("/offerCheck", async (req, res) => {
     res.status(500).send({ message: "An error occurred", error });
   }
 });
+
 app.post("/offerUnCheck", async (req, res) => {
   const { Id } = req.body;
   try {
@@ -453,6 +471,7 @@ app.post("/offerUnCheck", async (req, res) => {
     res.status(500).send({ message: "An error occurred", error });
   }
 });
+
 app.delete("/offer/:id", async (req, res) => {
   const { id } = req.params;
 
@@ -497,6 +516,7 @@ app.get("/getOffers", async (req, res) => {
     return res.status(403).send({ message: "Invalid token", error });
   }
 });
+
 app.delete("/deleteOffers", async (req, res) => {
   try {
     await Offer.deleteMany({}); // Delete all documents in the Offer collection
@@ -795,6 +815,7 @@ app.get("/blog", async (req, res) => {
     res.status(500).send(`Error: ${error.message}`);
   }
 });
+
 // Endpoint to get a blog by ID
 app.get("/blog/:id", async (req, res) => {
   const { id } = req.params;
@@ -815,6 +836,10 @@ app.get("/blog/:id", async (req, res) => {
     res.status(500).send(`Error: ${error.message}`);
   }
 });
+
+// ✅ ربط جميع الروتات من api/index.js
+const apiRoutes = require("./api/index");
+app.use("/api", apiRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

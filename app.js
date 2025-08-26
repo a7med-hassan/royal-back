@@ -59,8 +59,8 @@ app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Serve static files from uploads directory
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Note: Static files middleware removed for Vercel compatibility
+// Files are now stored in memory/database instead of disk
 
 const Warranty = require("./models/warranty");
 const Serial = require("./models/serial");
@@ -71,12 +71,17 @@ const Application = require("./models/application");
 const Blog = require("./models/blog");
 
 mongoose
-  .connect(`${process.env.MONGO_URI}`)
-  .then(() => {
-    console.log("db connected succefully");
+  .connect(`${process.env.MONGO_URI}`, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
   })
-  .catch(() => {
-    console.log("err connecting DB");
+  .then(() => {
+    console.log("db connected successfully");
+  })
+  .catch((err) => {
+    console.log("err connecting DB:", err.message);
   });
 
 /* admin add or delete serialss */
@@ -230,7 +235,13 @@ app.post("/checkSerial", async (req, res) => {
   }
 });
 
-const uploadWarranty = multer({ dest: "uploads/" });
+// Configure multer for Vercel (memory storage instead of disk)
+const uploadWarranty = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+});
 
 /* activate serial */
 app.post("/activation", uploadWarranty.single("image"), async (req, res) => {
@@ -269,6 +280,15 @@ app.post("/activation", uploadWarranty.single("image"), async (req, res) => {
       await foundSerial.save();
     }
 
+    // For Vercel, we'll store image data as base64 or use cloud storage
+    const imageData = req.file
+      ? {
+          buffer: req.file.buffer,
+          mimetype: req.file.mimetype,
+          originalname: req.file.originalname,
+        }
+      : null;
+
     const newActivation = new Warranty({
       name,
       phoneNumber,
@@ -280,13 +300,20 @@ app.post("/activation", uploadWarranty.single("image"), async (req, res) => {
       email,
       serialNumber,
       createdAt,
-      imagePath: req.file.path, // Save image path to warranty
+      imageData: imageData, // Store image data instead of file path
     });
+
     await newActivation.save();
     res.status(201).send({
       msg: "success",
       activation: newActivation,
-      imageUrl: req.file.path, // Return image path
+      imageInfo: imageData
+        ? {
+            mimetype: imageData.mimetype,
+            originalname: imageData.originalname,
+            size: imageData.buffer.length,
+          }
+        : null,
     });
   } catch (err) {
     res.status(500).send(`Error: ${err.message}`);
@@ -327,13 +354,8 @@ app.delete("/activation/:serialNumber", async (req, res) => {
       return res.status(404).send({ msg: "Activation not found" });
     }
 
-    const imagePath = path.join(__dirname, deletedActivation.imagePath);
-
-    fs.unlink(imagePath, (err) => {
-      if (err) {
-        console.error("Error deleting image:", err);
-      }
-    });
+    // For Vercel, we don't need to delete files from disk
+    // The image data is stored in the database
 
     const allActivations = await Warranty.find();
 
@@ -637,7 +659,13 @@ app.delete("/bookForm/:id", async (req, res) => {
   }
 });
 
-const uploadApplication = multer({ dest: "applicants/" });
+// Configure multer for applications (memory storage for Vercel)
+const uploadApplication = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for CV files
+  },
+});
 
 app.post(
   "/application",
@@ -647,6 +675,15 @@ app.post(
       req.body;
 
     try {
+      // For Vercel, store file data in database
+      const fileData = req.file
+        ? {
+            buffer: req.file.buffer,
+            mimetype: req.file.mimetype,
+            originalname: req.file.originalname,
+          }
+        : null;
+
       const newApplication = new Application({
         name,
         birthdate,
@@ -655,7 +692,7 @@ app.post(
         address,
         position,
         coverLetter,
-        cvPath: req.file.path,
+        fileData: fileData, // Store file data instead of file path
       });
       await newApplication.save();
       res.json({ statue: "success" });
@@ -695,8 +732,18 @@ app.get("/download/:id", async (req, res) => {
     if (!application) {
       return res.status(404).send("Application not found");
     }
-    const filePath = path.join(__dirname, application.cvPath);
-    res.download(filePath);
+
+    // For Vercel, serve file from memory storage
+    if (application.fileData && application.fileData.buffer) {
+      res.set({
+        "Content-Type": application.fileData.mimetype,
+        "Content-Disposition": `attachment; filename="${application.fileData.originalname}"`,
+        "Content-Length": application.fileData.buffer.length,
+      });
+      res.send(application.fileData.buffer);
+    } else {
+      res.status(404).send("File not found");
+    }
   } catch (error) {
     res.status(500).send(`Error: ${error.message}`);
   }

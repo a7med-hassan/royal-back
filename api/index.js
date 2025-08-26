@@ -82,12 +82,16 @@ const Appointment = require("../models/appointment");
 const Application = require("../models/application");
 const Blog = require("../models/blog");
 
+// MongoDB connection with timeout optimization
 mongoose
   .connect(`${process.env.MONGO_URI}`, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
+    serverSelectionTimeoutMS: 3000, // Reduced from 5000ms
+    socketTimeoutMS: 10000, // Reduced from 45000ms
+    connectTimeoutMS: 5000, // Added connection timeout
+    maxPoolSize: 5, // Limit connection pool
+    minPoolSize: 1,
   })
   .then(() => {
     console.log("db connected successfully");
@@ -98,6 +102,15 @@ mongoose
 
 /* admin add or delete serialss */
 router.get("/", (req, res) => res.send("Hello World!"));
+
+// Health check endpoint for Vercel
+router.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "development",
+  });
+});
 
 router.post("/addSerial", async (req, res) => {
   const { serialNumber, branch } = req.body;
@@ -828,4 +841,34 @@ router.get("/blog/:id", async (req, res) => {
   }
 });
 
-module.exports = router;
+// Create Express app and mount router
+const app = express();
+
+// Apply CORS and body parsing middleware
+app.use(cors());
+app.use(express.json());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Mount the router
+app.use("/", router);
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    error: "Something went wrong!",
+    message:
+      process.env.NODE_ENV === "development"
+        ? err.message
+        : "Internal server error",
+  });
+});
+
+// 404 handler
+app.use("*", (req, res) => {
+  res.status(404).json({ error: "Route not found" });
+});
+
+// Export for Vercel
+module.exports = app;

@@ -858,13 +858,5 @@ app.use("*", (req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
 
-const port = process.env.PORT || 3000;
-
-// Only start the server if not on Vercel
-if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
-  app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
-  });
-}
-
+// Export for Vercel - NO app.listen needed
 module.exports = app;

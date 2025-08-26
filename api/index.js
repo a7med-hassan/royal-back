@@ -83,38 +83,80 @@ const Application = require("../models/application");
 const Blog = require("../models/blog");
 
 // MongoDB connection with timeout optimization
-mongoose
-  .connect(`${process.env.MONGO_URI}`, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 3000, // Reduced from 5000ms
-    socketTimeoutMS: 10000, // Reduced from 45000ms
-    connectTimeoutMS: 5000, // Added connection timeout
-    maxPoolSize: 5, // Limit connection pool
-    minPoolSize: 1,
-  })
-  .then(() => {
-    console.log("db connected successfully");
-  })
-  .catch((err) => {
-    console.log("err connecting DB:", err.message);
-  });
+const connectDB = async (retries = 3) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      if (!process.env.MONGO_URI) {
+        console.log("🔴 MONGO_URI not found in environment variables");
+        throw new Error("MONGO_URI environment variable is not set");
+      }
+
+      console.log(`🟡 Attempting to connect to MongoDB (Attempt ${attempt}/${retries})...`);
+      
+      const connection = await mongoose.connect(process.env.MONGO_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        serverSelectionTimeoutMS: 15000, // Increased for better reliability
+        socketTimeoutMS: 20000, // Increased for better reliability
+        connectTimeoutMS: 15000, // Increased for better reliability
+        maxPoolSize: 10, // Increased pool size
+        minPoolSize: 2,
+        retryWrites: true,
+        w: "majority",
+        bufferMaxEntries: 0, // Disable mongoose buffering
+        bufferCommands: false, // Disable mongoose buffering
+        heartbeatFrequencyMS: 10000, // Heartbeat every 10 seconds
+        autoReconnect: true,
+        reconnectTries: Number.MAX_VALUE,
+        reconnectInterval: 1000,
+      });
+
+      console.log("🟢 MongoDB connected successfully");
+      console.log(`📍 Host: ${connection.connection.host}`);
+      console.log(`🔌 Port: ${connection.connection.port}`);
+      console.log(`🗄️ Database: ${connection.connection.name}`);
+      
+      return connection;
+    } catch (err) {
+      console.log(`🔴 MongoDB connection attempt ${attempt} failed:`, err.message);
+      
+      if (attempt === retries) {
+        console.log("🔴 All connection attempts failed. Final error:", err.message);
+        console.log("🔍 Connection details:", {
+          uri: process.env.MONGO_URI ? `${process.env.MONGO_URI.substring(0, 30)}...` : "Not set",
+          error: err.message,
+          code: err.code,
+          name: err.name
+        });
+        throw err;
+      }
+      
+      // Wait before retrying
+      const waitTime = attempt * 2000; // 2s, 4s, 6s
+      console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+};
+
+// Initialize database connection
+connectDB().catch(console.error);
 
 // MongoDB Connection Event Listeners
-mongoose.connection.on('connected', () => {
-  console.log('🟢 MongoDB connected successfully');
+mongoose.connection.on("connected", () => {
+  console.log("🟢 MongoDB connected successfully");
 });
 
-mongoose.connection.on('error', (err) => {
-  console.log('🔴 MongoDB connection error:', err);
+mongoose.connection.on("error", (err) => {
+  console.log("🔴 MongoDB connection error:", err);
 });
 
-mongoose.connection.on('disconnected', () => {
-  console.log('🟠 MongoDB disconnected');
+mongoose.connection.on("disconnected", () => {
+  console.log("🟠 MongoDB disconnected");
 });
 
-mongoose.connection.on('reconnected', () => {
-  console.log('🟡 MongoDB reconnected');
+mongoose.connection.on("reconnected", () => {
+  console.log("🟡 MongoDB reconnected");
 });
 
 /* admin add or delete serialss */
@@ -132,35 +174,40 @@ router.get("/health", async (req, res) => {
         mongoInfo = {
           status: "disconnected",
           message: "MongoDB is disconnected",
-          color: "🔴"
+          color: "🔴",
+          details: "No active connection to database"
         };
         break;
       case 1:
         mongoInfo = {
           status: "connected",
           message: "MongoDB is connected",
-          color: "🟢"
+          color: "🟢",
+          details: "Database connection is active and healthy"
         };
         break;
       case 2:
         mongoInfo = {
           status: "connecting",
           message: "MongoDB is connecting",
-          color: "🟡"
+          color: "🟡",
+          details: "Attempting to establish database connection"
         };
         break;
       case 3:
         mongoInfo = {
           status: "disconnecting",
           message: "MongoDB is disconnecting",
-          color: "🟠"
+          color: "🟠",
+          details: "Database connection is being closed"
         };
         break;
       default:
         mongoInfo = {
           status: "unknown",
           message: "MongoDB status unknown",
-          color: "⚪"
+          color: "⚪",
+          details: "Unable to determine database connection status"
         };
     }
 
@@ -171,6 +218,7 @@ router.get("/health", async (req, res) => {
       port: mongoConnection.port || "Unknown",
       name: mongoConnection.name || "Unknown",
       readyState: mongoStatus,
+      readyStateText: ["disconnected", "connected", "connecting", "disconnecting"][mongoStatus] || "unknown",
       ...mongoInfo
     };
 
@@ -183,32 +231,67 @@ router.get("/health", async (req, res) => {
         await mongoose.connection.db.admin().ping();
         const pingTime = Date.now() - startTime;
         
+        // Get collection information
+        const collections = await mongoose.connection.db.listCollections().toArray();
+        
         dbTest = {
           ping: "success",
           responseTime: `${pingTime}ms`,
-          collections: Object.keys(mongoose.connection.collections).length
+          collections: collections.length,
+          collectionNames: collections.map(col => col.name),
+          databaseStats: {
+            ping: pingTime,
+            status: "healthy"
+          }
         };
       } catch (error) {
         dbTest = {
           ping: "failed",
-          error: error.message
+          error: error.message,
+          status: "unhealthy"
         };
       }
+    } else {
+      dbTest = {
+        ping: "skipped",
+        reason: "Database not connected",
+        status: "unavailable"
+      };
     }
 
+    // Check environment variables
+    const envCheck = {
+      MONGO_URI: process.env.MONGO_URI ? "✅ Set" : "❌ Not Set",
+      JWT_SECRET_KEY: process.env.JWT_SECRET_KEY ? "✅ Set" : "❌ Not Set",
+      GMAIL_USER: process.env.GMAIL_USER ? "✅ Set" : "❌ Not Set",
+      GMAIL_PASS: process.env.GMAIL_PASS ? "✅ Set" : "❌ Not Set"
+    };
+
     const healthResponse = {
-      status: "OK",
+      status: mongoStatus === 1 ? "OK" : "WARNING",
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || "development",
-      uptime: process.uptime(),
+      uptime: Math.round(process.uptime()),
       memory: {
         used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + "MB",
-        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + "MB"
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + "MB",
+        external: Math.round(process.memoryUsage().external / 1024 / 1024) + "MB"
       },
       mongodb: mongoDetails,
       database: dbTest,
-      version: process.version,
-      platform: process.platform
+      environment: {
+        node: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        env: process.env.NODE_ENV || "development"
+      },
+      environmentVariables: envCheck,
+      recommendations: mongoStatus !== 1 ? [
+        "Check MONGO_URI environment variable",
+        "Verify MongoDB Atlas network access",
+        "Check MongoDB Atlas cluster status",
+        "Verify connection string format"
+      ] : []
     };
 
     res.status(200).json(healthResponse);
@@ -220,8 +303,14 @@ router.get("/health", async (req, res) => {
       mongodb: {
         status: "error",
         message: "Failed to check MongoDB status",
-        color: "🔴"
-      }
+        color: "🔴",
+        details: error.message
+      },
+      recommendations: [
+        "Check server logs for detailed error information",
+        "Verify MongoDB connection string",
+        "Check network connectivity to MongoDB Atlas"
+      ]
     });
   }
 });

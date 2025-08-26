@@ -100,16 +100,130 @@ mongoose
     console.log("err connecting DB:", err.message);
   });
 
+// MongoDB Connection Event Listeners
+mongoose.connection.on('connected', () => {
+  console.log('🟢 MongoDB connected successfully');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.log('🔴 MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('🟠 MongoDB disconnected');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('🟡 MongoDB reconnected');
+});
+
 /* admin add or delete serialss */
 router.get("/", (req, res) => res.send("Hello World!"));
 
 // Health check endpoint for Vercel
-router.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "OK",
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || "development",
-  });
+router.get("/health", async (req, res) => {
+  try {
+    // Check MongoDB connection status
+    const mongoStatus = mongoose.connection.readyState;
+    let mongoInfo = {};
+    
+    switch (mongoStatus) {
+      case 0:
+        mongoInfo = {
+          status: "disconnected",
+          message: "MongoDB is disconnected",
+          color: "🔴"
+        };
+        break;
+      case 1:
+        mongoInfo = {
+          status: "connected",
+          message: "MongoDB is connected",
+          color: "🟢"
+        };
+        break;
+      case 2:
+        mongoInfo = {
+          status: "connecting",
+          message: "MongoDB is connecting",
+          color: "🟡"
+        };
+        break;
+      case 3:
+        mongoInfo = {
+          status: "disconnecting",
+          message: "MongoDB is disconnecting",
+          color: "🟠"
+        };
+        break;
+      default:
+        mongoInfo = {
+          status: "unknown",
+          message: "MongoDB status unknown",
+          color: "⚪"
+        };
+    }
+
+    // Get MongoDB connection details
+    const mongoConnection = mongoose.connection;
+    const mongoDetails = {
+      host: mongoConnection.host || "Unknown",
+      port: mongoConnection.port || "Unknown",
+      name: mongoConnection.name || "Unknown",
+      readyState: mongoStatus,
+      ...mongoInfo
+    };
+
+    // Test database operations if connected
+    let dbTest = {};
+    if (mongoStatus === 1) {
+      try {
+        // Test a simple database operation
+        const startTime = Date.now();
+        await mongoose.connection.db.admin().ping();
+        const pingTime = Date.now() - startTime;
+        
+        dbTest = {
+          ping: "success",
+          responseTime: `${pingTime}ms`,
+          collections: Object.keys(mongoose.connection.collections).length
+        };
+      } catch (error) {
+        dbTest = {
+          ping: "failed",
+          error: error.message
+        };
+      }
+    }
+
+    const healthResponse = {
+      status: "OK",
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || "development",
+      uptime: process.uptime(),
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + "MB",
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + "MB"
+      },
+      mongodb: mongoDetails,
+      database: dbTest,
+      version: process.version,
+      platform: process.platform
+    };
+
+    res.status(200).json(healthResponse);
+  } catch (error) {
+    res.status(500).json({
+      status: "ERROR",
+      timestamp: new Date().toISOString(),
+      error: error.message,
+      mongodb: {
+        status: "error",
+        message: "Failed to check MongoDB status",
+        color: "🔴"
+      }
+    });
+  }
 });
 
 router.post("/addSerial", async (req, res) => {

@@ -12,10 +12,54 @@ const path = require("path");
 
 const app = express();
 
+// Enhanced CORS configuration for Vercel
+app.use(
+  cors({
+    origin: [
+      // Local development
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:4200",
+      "http://localhost:4201",
+      "http://localhost:4202",
+      "http://localhost:5173",
+
+      // Royal Nano Ceramic - Main domain
+      "https://www.royalnanoceramic.com",
+      "https://royalnanoceramic.com",
+
+      // Royal Shield World - Main domain
+      "https://www.royalshieldworld.com",
+      "https://royalshieldworld.com",
+
+      // Vercel domains (for development/testing)
+      "https://*.vercel.app",
+      "https://*.netlify.app",
+
+      // Allow subdomains
+      "https://*.royalnanoceramic.com",
+      "https://*.royalshieldworld.com",
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+      "Access-Control-Allow-Headers",
+    ],
+    exposedHeaders: ["Content-Range", "X-Content-Range"],
+    maxAge: 86400, // 24 hours
+  })
+);
+
 app.use(express.json());
-app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// Serve static files from uploads directory
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const Warranty = require("./models/warranty");
@@ -37,6 +81,16 @@ mongoose
 
 /* admin add or delete serialss */
 app.get("/", (req, res) => res.send("Hello World!"));
+
+// Health check endpoint for Vercel
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "development",
+  });
+});
+
 app.post("/addSerial", async (req, res) => {
   const { serialNumber, branch } = req.body;
 
@@ -715,7 +769,30 @@ app.get("/blog/:id", async (req, res) => {
   }
 });
 
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log("port is 3000");
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    error: "Something went wrong!",
+    message:
+      process.env.NODE_ENV === "development"
+        ? err.message
+        : "Internal server error",
+  });
 });
+
+// 404 handler
+app.use("*", (req, res) => {
+  res.status(404).json({ error: "Route not found" });
+});
+
+const port = process.env.PORT || 3000;
+
+// Only start the server if not on Vercel
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+  });
+}
+
+module.exports = app;
